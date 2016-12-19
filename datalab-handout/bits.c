@@ -457,7 +457,19 @@ int bitReverse(int x) {
  *   Rating: 2
  */
 unsigned float_abs(unsigned uf) {
-  return 2;
+    /*
+     * First decide if argument is NaN
+     * If it is, return argument directly
+     * Otherwise, clear the sign bit
+     */
+    unsigned signMask = 0x7FFFFFFF;
+    unsigned expoMask = 0x7F800000;
+    unsigned fracMask = 0x007FFFFF;
+
+    if ((uf & expoMask) == expoMask && (uf & fracMask))
+        return uf;
+    else
+        return uf & signMask;
 }
 /* 
  * float_i2f - Return bit-level equivalent of expression (float) x
@@ -469,7 +481,48 @@ unsigned float_abs(unsigned uf) {
  *   Rating: 4
  */
 unsigned float_i2f(int x) {
-  return 2;
+    /*
+     * The trickiest part is getting the correct fraction bits.
+     * To get it right, we need to consider rounding or extending.
+     * Rounding must adhere to the IEEE default mode: Nearest Even.
+     */
+    unsigned sign, expo, frac;
+    unsigned ux, E, M;
+    int bits;
+    unsigned leaf, half, roundup;
+
+    if (x == 0) return 0;
+
+    if (x < 0) { sign = 1; ux = -x; }
+    else { sign = 0; ux = x; };
+
+    E = 0;
+    M = ux;
+    roundup = 0;
+
+    while (ux > 1) {
+        ux >>= 1;
+        E++;
+    }
+
+    expo = E + 127;
+    frac = M & ((1 << E) - 1);
+    bits = E - 23; // how many bits we need to round or extend?
+
+    if (bits > 0) { // rounding
+        leaf = frac & ((1 << bits) - 1);
+        half = 1 << (bits - 1);
+        frac = frac >> bits;
+        if (leaf > half || (leaf == half && frac & 0x1)) {
+            // round up if
+            // greater than half [OR] exactly half way and the rounding bit is 1
+            roundup = 1;
+        }
+    } else {        // extending
+        frac <<= (-bits);
+    }
+
+    return ((sign << 31) | (expo << 23) | frac) + roundup;
 }
 /* 
  * float_times64 - Return bit-level equivalent of expression 64*f for
@@ -483,5 +536,44 @@ unsigned float_i2f(int x) {
  *   Rating: 4
  */
 unsigned float_times64(unsigned uf) {
-  return 2;
+    unsigned signMask = 0x80000000;
+    unsigned expoMask = 0x7F800000;
+    unsigned fracMask = 0x007FFFFF;
+    unsigned pInf     = 0x7f800000;
+    unsigned nInf     = 0xff800000;
+
+    unsigned sign, expo, frac;
+    int E;
+
+    if ((uf & expoMask) == expoMask && (uf & fracMask)) // f is NaN
+        return uf;
+    if ((uf & (~signMask)) == 0) // f is zero
+        return uf;
+
+    sign = uf & signMask;
+    expo = (uf & expoMask) >> 23;
+    frac = uf & fracMask;
+
+    if (expo == 0) { // f is denorm
+        E = 1 - 127 + 6;
+        while ((frac & 0x800000) == 0 && E > 1 - 127) {
+            frac <<= 1;
+            E--;
+        }
+        if (frac & 0x800000) { // 64*f is norm
+            frac = frac & 0x7FFFFF;
+            expo = E + 127;
+        } else { // 64*f is denorm
+            expo = 0;
+        }
+    } else { // f is norm
+        E = expo - 127 + 6;
+        if (E >= 128) {
+            if (sign) return nInf;
+            else return pInf;
+        }
+        expo = E + 127;
+    }
+
+    return sign | (expo << 23) | frac;
 }
