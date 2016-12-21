@@ -141,11 +141,10 @@ NOTES:
  */
 int bitOr(int x, int y) {
     /*
-     * Target: only two 0s produce 0
-     * & op: only two 1s produce 1
-     * ~ op: convert 1 to 0
-     * (~x & ~y): only two 0s produce 1
-     * ~(~x & ~y): only two 0s produce 0
+     * Target:     x = 0 and y = 0 => 0, otherwise 1
+     * (x & y):    x = 1 and y = 1 => 1, otherwise 0
+     * (~x & ~y):  x = 0 and y = 0 => 1, otherwise 0
+     * ~(~x & ~y): x = 0 and y = 0 => 0, otherwise 1
      */
     return ~(~x & ~y);
 }
@@ -158,8 +157,11 @@ int bitOr(int x, int y) {
 int specialBits(void) {
     /*
      * 0x  F    F    C    A    3    F    F    F
-     *    1111 1111 1100 1010 0011 1111 1111 1111 => flip all bits
-     *    0000 0000 0011 0101 1100 0000 0000 0000 => 1101 0111 << 14
+     *    1111 1111 1100 1010 0011 1111 1111 1111
+     *    ---- ---- ---- ---- ---- ---- ---- ----
+     *    0000 0000 0000 0000 0000 0000 1101 0111 => 0xD7
+     *    0000 0000 0011 0101 1100 0000 0000 0000 => (0xD7 << 14)
+     *    1111 1111 1100 1010 0011 1111 1111 1111 => ~(0xD7 << 14)
      */
     return ~(0xD7 << 14);
 }
@@ -173,8 +175,7 @@ int specialBits(void) {
  */
 int isZero(int x) {
     /*
-     * !0 = 1
-     * !other = 0
+     * Exactly what ! operand does
      */
     return !x;
 }
@@ -187,16 +188,13 @@ int isZero(int x) {
  */
 int anyEvenBit(int x) {
     /*
-     * Use mask 01010101b to preserve only even bits in every byte
-     * Aggreate the results with or operation
-     * Test if it is zero or not (same idea as isZero function)
+     * Use mask 0x55555555 to preserve only even-numbered bits in word
+     * Test if it is zero or not (same idea from isZero function)
      */
-    int M = 0x55;
-    int a = x & M;
-    int b = (x >> 8) & M;
-    int c = (x >> 16) & M;
-    int d = (x >> 24) & M;
-    return !(!(a | b | c | d));
+    int mask = 0x55;
+    mask |= (mask << 8);
+    mask |= (mask << 16);
+    return !!(x & mask);
 }
 /* 
  * negate - return -x 
@@ -206,7 +204,9 @@ int anyEvenBit(int x) {
  *   Rating: 2
  */
 int negate(int x) {
-    /* Flip all bits then add 1 */
+    /*
+     * Standard routine for negation
+     */
     return ~x + 1;
 }
 /* 
@@ -219,10 +219,12 @@ int negate(int x) {
  */
 int leastBitPos(int x) {
     /*
-     * Take x = 01100000b as an example
-     * ~x = 10011111b
-     * ~x + 1 = 10100000b
-     * (~x + 1) & x = 00100000b
+     * Example (x = 0x60):
+     *
+     * 0110 0000  x
+     * 1001 1111 ~x
+     * 1010 0000 (~x + 1)
+     * 0010 0000 (~x + 1) & x
      */
     return (~x + 1) & x;
 }
